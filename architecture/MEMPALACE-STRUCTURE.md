@@ -2,7 +2,7 @@
 
 ## Overview
 
-Single source of truth for how memory is organized across the four agents (Orchestrator, Jeeves, Nova, Sage). Adapted from a simpler single-owner memory-palace design, then rebuilt specifically to solve the problem that design didn't have: **multiple agents, multiple companies, one gateway, zero tolerance for cross-contamination.**
+Single source of truth for how memory is organized across the four agent configs on this gateway — Orchestrator and Jeeves, both live in production, plus Nova and Sage, fully designed and scoped but paused pending team rollout. Adapted from a simpler single-owner memory-palace design, then rebuilt specifically to solve the problem that design didn't have: **multiple agents, multiple companies, one gateway, zero tolerance for cross-contamination.**
 
 What transferred from the single-owner version: pipeline discipline, cron-enforced automation, the knowledge-graph confirm-gate, the destructive-action gate. What didn't: a single shared palace with wing-scoped access. A single-owner deployment doesn't have a "two paying clients who must never see each other's data" problem — this one does, so the physical architecture had to change to match.
 

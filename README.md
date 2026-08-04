@@ -1,7 +1,7 @@
 # multi-tenant-ai-stack
 
 [![Multi-Tenant](https://img.shields.io/badge/tenants-2_companies-blueviolet?style=flat-square)](https://github.com)
-[![Multi-Agent](https://img.shields.io/badge/multi--agent-4_agents-blue?style=flat-square)](https://github.com)
+[![Multi-Agent](https://img.shields.io/badge/agents-2_live_%2B_2_designed-blue?style=flat-square)](https://github.com)
 [![Self-Hosted](https://img.shields.io/badge/infrastructure-self--hosted-green?style=flat-square)](https://github.com)
 [![Isolation: Enforced](https://img.shields.io/badge/tenant%20isolation-schema--level-success?style=flat-square)](#multi-tenant-security-architecture)
 [![License: Client Work](https://img.shields.io/badge/license-client--confidential-red?style=flat-square)](#)
@@ -91,7 +91,7 @@ Same status as Nova, scoped to the social-media department folder tree instead. 
 
 ## Multi-Tenant Security Architecture
 
-The core engineering problem here isn't "give an agent memory" — it's **give four agents overlapping-but-not-identical memory, on one gateway, with zero possibility of cross-contamination**, across two companies who are paying customers of the same consultant and have every right to expect their data never touches the other's.
+The core engineering problem here isn't "give an agent memory" — it's **give multiple agents — two live in production, two fully built and scoped but not yet activated — overlapping-but-not-identical memory, on one gateway, with zero possibility of cross-contamination**, across two companies who are paying customers of the same consultant and have every right to expect their data never touches the other's.
 
 ### Isolation is structural, not promised
 
@@ -139,7 +139,7 @@ Two-tier routing on every agent: a capable planning model does analysis, investi
 ### Skill Workshop — Governed Installation
 Skills aren't installed ad hoc. Every skill goes through a proposal → review → approve → apply pipeline, each with a `PROPOSAL.md`, a `proposal.json`, and a `rollback.json` — every install is a documented, reversible decision. This isn't theoretical: a skill delivery attempted via a raw `curl` command mid-conversation was independently flagged and blocked as a likely prompt-injection attempt (on two separate channels, by two different agent sessions) before the same skill was later fetched, reviewed line-by-line, and properly installed through the workshop.
 
-### Proactive Agent Protocol (deployed across all 4 agents)
+### Proactive Agent Protocol (deployed to all 4 agent configs — 2 live, 2 built and paused)
 - **WAL (Write-Ahead Log):** decisions, corrections, and preferences get written to session state *before* the agent responds — not after
 - **Working buffer:** activates at 60% context capacity; captures the conversation verbatim so a context reset never loses the thread
 - **Compaction recovery:** an agent waking up mid-context-loss reads the working buffer first — it never has to ask "what were we doing?"
@@ -187,7 +187,7 @@ Full detail in [`architecture/tech-stack.md`](architecture/tech-stack.md).
 
 **Isolation:**
 - Two independent tenants (an operations/finance business, a creative + dev studio) sharing one gateway
-- Four agent instances, each with an enforced tool + memory + filesystem scope
+- Four agent instances built (two live in production, two designed and scoped but paused for team rollout), each with an enforced tool + memory + filesystem scope
 - Department agents talk to their team's Slack channel, not to the operator — a deliberate "delegation of automation," not remote-control tooling
 
 **Current status:**

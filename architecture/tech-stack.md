@@ -11,7 +11,7 @@ A multi-tenant automation stack standing up department-facing AI agents for two 
 ## Component Architecture
 
 ### 1. OpenClaw Gateway — Central Control
-**Role:** Self-hosted orchestration platform for all four agents
+**Role:** Self-hosted orchestration platform for all four agent configs (two live in production, two built and paused for rollout)
 
 **Responsibilities:**
 - Gateway process — manages tool access, agent lifecycle, channel routing
