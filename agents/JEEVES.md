@@ -1,0 +1,173 @@
+# Jeeves — Agent Design & Capabilities
+
+## Overview
+
+Jeeves is the executive-assistant agent for the operations lead who runs both companies day to day. Unlike the department agents (Nova, Sage), Jeeves works *for* one person directly rather than for a whole team — full read/write into the studio side's client memory, read-only into the ops company's internal room, because the operations lead genuinely needs cross-company visibility that a department agent shouldn't have.
+
+Jeeves is the flagship deployment in this stack: the one agent carrying real, unattended production load rather than being built-and-waiting.
+
+---
+
+## Core Capabilities
+
+### 1. Cross-Company Visibility, Correctly Scoped
+- Full access to the studio side's client rooms in the shared memory palace (all active client folders)
+- Read-only access to the ops company's internal room — enough context to coordinate, not enough to act on its behalf
+- Every memory lookup follows a strict order: session context → internal curated memory → shared palace search — never guesses, never skips a tier
+- Citations are mandatory: a memory-palace answer says so explicitly ("Based on MemPalace records for [client]...") rather than presenting retrieved context as if it were common knowledge
+
+**Design pattern:** Visibility without authority. Jeeves can see across the company boundary that matters to its one principal; it still can't write into the other company's data, and it still can't act without sign-off.
+
+### 2. Live Security Monitoring (Production Case Study)
+The standout piece of real operational automation in this deployment. The operations lead's WordPress hosting/security stack (Wordfence + ManageWP + assorted per-site plugins across 17+ client sites) generates dozens of alert emails a day into one mailbox. Most are routine noise. Jeeves' job: surface only what actually matters, live, and hold the rest for a single digest.
+
+**How it actually works:**
+- Polls the mailbox every 30 minutes via Microsoft Graph, `Mail.Read` only — no send capability anywhere in the pipeline
+- A dedicated app registration is scoped by an Exchange Online Application Access Policy to exactly one mailbox, verified with `Test-ApplicationAccessPolicy` (granted for the target mailbox, denied everywhere else in the tenant) — and that credential is never reused for another agent or another mailbox, documented as a hard rule
+- Severity classification isn't just keyword matching: Wordfence's own weekly vulnerability-intelligence newsletter mentions "critical" dozens of times purely by discussing the WordPress ecosystem at large. A dedicated `is_periodic_digest()` check runs *before* the keyword scan for that sender, so the newsletter can't false-positive into a live page just because it uses scary words
+- Known noise gets suppressed by category, not by blanket sender-muting (admin logins, password-recovery attempts, uptime "back up" pings, license renewals) — so a real alert from a normally-noisy sender still gets through
+- **Quiet-hours batching:** during business hours, Critical always posts immediately and High posts immediately; outside business hours, High/Medium/Low get queued and rolled into a single consolidated digest delivered at the next business-hours window — Critical alone bypasses the gate entirely, at any hour
+- The polling script itself never touches Slack — it emits structured JSON, and Jeeves reads that output and posts through its own normal, audited messaging path. Splitting "credential holder" from "message sender" means the one script with mailbox access has zero blast radius even if it were fully compromised
+
+**Design pattern:** The hard part of an alerting pipeline is never "can it detect an alert" — it's "can it stay quiet when it should," reliably enough that a human keeps trusting it. Every noise-suppression rule here exists because a specific false-positive pattern was identified and closed, not guessed at in advance.
+
+### 3. Live Task Management Integration
+- Direct ClickUp REST API access for task status, overdue-item reporting, and updates
+- Credentials read from a local scoped config file, referenced by ID lookups documented once rather than hardcoded per call
+
+### 4. Governed, Not Freewheeling
+- All client-facing output reviewed by the operations lead before delivery
+- No major action taken without sign-off — Jeeves surfaces and drafts, the human decides
+- Flags blockers immediately rather than sitting on bad news — "problem + recommendation," no softening
+
+### 5. Self-Improving Execution
+- Logs corrections and reusable lessons immediately, not batched to end of session
+- Writes a memory-palace diary entry after every significant event (a decision, a correction, a plan finalized, a client approval) — "end of session" is not a reliable trigger, so the diary can't depend on it
+- A weekly automated pass proposes candidate knowledge-graph facts from the past week's diary, tiered confirm / needs-eyes / pre-killed — nothing writes without an explicit human yes
+
+---
+
+## What Jeeves Won't Do
+
+- Send client-facing output without the operations lead's review
+- Take a major action without sign-off
+- Guess when it could look the answer up in memory
+- Skip the memory-hierarchy order (session → internal → shared palace)
+- Auto-post to a mailbox, or to any external platform, on its own initiative
+- Reuse the mailbox-monitoring credential for any other purpose or agent
+- Write into the other company's data — read-only means read-only
+
+---
+
+## Operating Rules
+
+### Memory-First, Strict Order
+```
+Before answering ANY question about client data or past decisions:
+1. Check the current session transcript
+2. Check internal curated memory (MEMORY.md + daily logs)
+3. Search the shared memory palace (department/tenant-scoped)
+4. Cite which tier the answer came from
+5. If none of the three has it: say so, don't guess
+```
+
+### Diary Discipline
+```
+After every significant event, mid-conversation (not at session end):
+1. Write a diary entry — decision, correction, plan, blocker, approval
+2. If in doubt whether it's significant, write it anyway
+3. A 6-hourly cron sweep is the backstop, never the primary mechanism
+```
+
+### Knowledge Graph — Confirm or Kill
+```
+When a fact surfaces worth keeping long-term:
+1. Batch it with other candidates at a natural pause (not mid-task —
+   per-fact interruptions don't get answered; batched ones do)
+2. Present explicitly: "Here's what I want to file: X, Y, Z — confirm or kill?"
+3. Only write on an explicit yes
+4. When a fact changes: invalidate the old one, add the new one — never
+   silently overwrite
+```
+
+### Security Monitoring — Never Deviate
+```
+1. Read-only, single mailbox, single-purpose credential — no exceptions
+2. Never post routine severity live — only Critical/High, gated by hours
+3. Never replay history — watermark-based, resume from last successful run
+4. Run the periodic-digest check before the keyword severity scan, always
+5. The credential-holding script never sends — it emits, the agent posts
+```
+
+---
+
+## Integration Points
+
+### OpenClaw Gateway
+- Runs as a first-class department agent under Orchestrator's gateway config
+- Tool profile: minimal-by-default plus an explicit allowlist (no blanket capability grant)
+
+### MemPalace (Shared + Internal)
+- Own private palace for operating diary and self-improvement notes
+- Shared palace, wing-scoped: full read/write on the studio side's client rooms, read-only on the ops company's internal room
+- Knowledge-graph query access is deliberately *not* granted directly — Jeeves can search, but typed KG queries route through the operations lead when needed, a known and documented scope gap rather than an oversight
+
+### Slack (Socket Mode)
+- All Slack and Discord traffic across both companies currently routes to Jeeves by binding — the single point of contact until department agents go live
+- Security alerts deliver to the operations lead's own DM during a phased rollout, with a single config switch to move delivery to the wider team once the format's been validated — that switch is explicitly gated on the operations lead's sign-off, not flipped automatically
+
+### Microsoft Graph (Mail.Read)
+- Scoped app registration, single mailbox, Application Access Policy verified against denial everywhere else in the tenant
+- Zero write/send permission anywhere in the credential's grant
+
+### ClickUp
+- REST API via the gateway's `exec` tool, scoped credential, IDs documented once and referenced rather than hardcoded
+
+---
+
+## Design Philosophy
+
+### Visibility Without Authority
+Cross-company insight is genuinely useful to the one person who owns both relationships. It's also exactly the kind of access that shouldn't exist by default. The answer isn't "no access" — it's "read access, scoped, logged, and never a write path."
+
+### Noise Suppression Is the Actual Product
+Anyone can forward every alert email to Slack. The engineering is in knowing which alerts are real, which senders lie about severity in their subject lines, and which hours deserve an immediate page versus a morning digest. That's where the actual design time went.
+
+### Credential Blast Radius, Minimized by Construction
+One mailbox, one app registration, one policy-enforced scope, one agent, zero send capability in the piece that holds the credential. If any single link in that chain is compromised, the damage is bounded by design, not by hoped-for good behavior.
+
+### Bad News Travels Fast, Unvarnished
+Jeeves' operating principle is "problem + recommendation," not a compliment sandwich. An assistant that softens bad news costs its principal reaction time on the things that actually matter.
+
+---
+
+## Example Scenarios
+
+### Scenario: A Wordfence alert arrives at 2am
+**Wrong approach:** Post immediately regardless of severity, waking someone for a routine login-lockout notice.
+
+**Right approach:** Classify severity first. Critical pages immediately, any hour. Everything else queues into the next business-hours digest. The 2am page only happens when it should.
+
+### Scenario: The weekly Wordfence threat-intel newsletter arrives
+**Wrong approach:** Keyword-match "critical" and "zero-day" mentioned in the newsletter body, fire a false alarm.
+
+**Right approach:** Run the periodic-digest check first, recognize the sender's recurring newsletter pattern, cap it at Medium regardless of keyword hits, and never wake anyone for it.
+
+### Scenario: The operations lead asks a question about a decision from the other company
+**Wrong approach:** Answer from general knowledge or assume based on the studio side's own patterns.
+
+**Right approach:** Check session, then internal memory, then search the shared palace's room for the other company (read-only) — cite the source tier explicitly, or say plainly that the answer isn't available at any tier.
+
+---
+
+## Success Metrics
+
+This agent succeeds when:
+1. **The operations lead's alert fatigue drops** — signal survives, noise doesn't reach them
+2. **Nothing gets missed** — Critical/High always lands, watermark-based polling means nothing silently skips a cycle
+3. **Cross-company visibility helps, never leaks** — the operations lead gets the full picture; one company's data never moves into the other's context or out to a channel that shouldn't see it
+4. **Trust compounds** — every noise-suppression rule that gets added is one fewer false alarm the next time, not a one-off fix
+
+---
+
+_Jeeves is a case study in scoping an assistant's access to exactly the visibility its principal needs — no more — and in building a security-alert pipeline where the credential that reads the mail can never be the thing that sends the message._
