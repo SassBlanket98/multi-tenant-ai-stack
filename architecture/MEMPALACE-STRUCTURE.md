@@ -23,7 +23,7 @@ palaces/
 Each palace is registered as its own MCP server with its own derived tool prefix (`mempalace-orchestrator__`, `mempalace-jeeves__`, `mempalace-shared__`). Agent tool configs explicitly deny the prefixes they shouldn't have:
 
 - **Orchestrator:** full access to its own private prefix + shared; Jeeves' private prefix is structurally absent from its tool schema
-- **Jeeves:** full access to its own private prefix; read-only on shared (search/get/list — no write, no delete); Orchestrator's private prefix is structurally absent
+- **Jeeves:** full access to its own private prefix; read-only on shared (search/get/list — no write, no delete), further wing-scoped to its own company's rooms only — the other tenant's wing isn't reachable even in read-only form; Orchestrator's private prefix is structurally absent
 - **Nova/Sage:** no palace yet — dormant agents don't get memory infrastructure they're not using
 
 **Verified live, not just configured:** a wrong-prefix tool call isn't caught by a runtime permission check that could theoretically be talked around — the tool simply isn't present in the calling agent's tool schema. Confirmed by direct agent-turn tests in both directions before this was considered done.

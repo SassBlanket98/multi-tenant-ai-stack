@@ -1,4 +1,4 @@
-# Flint + Kernel AI Stack — Complete Architecture
+# Multi-Tenant AI Stack — Complete Architecture
 
 ## Overview
 
@@ -133,17 +133,17 @@ Agent posts to the department channel — not to the operator
 Team lead reviews and approves
 ```
 
-### Cross-Company Assist (Jeeves pattern)
+### Scoped Executive Assist (Jeeves pattern)
 ```
-Operations lead asks a question spanning both companies
+PM asks a question about a client or department within their own company
     ↓
 Jeeves checks session → internal memory → shared palace search
     ↓
-Full read/write on the studio side's rooms; read-only on the ops company's
+Full read/write on that company's own rooms, across every department
     ↓
 Answer delivered with explicit source-tier citation
     ↓
-No write path back into the ops company's data under any circumstance
+No path into the other tenant's wing at all — not read, not write
 ```
 
 ### Security Alert Pipeline

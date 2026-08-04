@@ -71,13 +71,13 @@ The only agent with full gateway control. Builds, configures, and hands off ever
 **Design stance:** *"Implementation > experimentation."* No department agent ships without documented tool policy, file scope, and a tested handoff. Runs the model-delegation split (below) on every non-trivial task itself before ever spawning a subagent.
 
 ### 🎩 Jeeves — Executive Assistant *(Flagship Deployment)*
-The standout real-world case. Jeeves is the operations lead's executive assistant across both companies — project visibility, cross-department coordination, and a live security-monitoring pipeline that runs unattended in production.
+The standout real-world case. Jeeves is the studio side's executive-assistant / PM-support agent — full visibility across that company's departments and client accounts, and a live security-monitoring pipeline that runs unattended in production.
 
 **What Jeeves does in production:**
-- Full read/write access to the studio side's client rooms in the shared memory palace; read-only into the ops company's internal room — a real cross-company visibility need, safely scoped
+- Full read/write access to the studio's own client rooms in the shared memory palace, across every department and account — no access at all into the other company's wing
 - ClickUp task status and reporting via the live REST API
 - Polls a shared mailbox every 30 minutes across 17+ client WordPress sites for Wordfence/ManageWP security alerts, classifies severity, suppresses known noise, and posts only what actually matters straight to Slack — see [`agents/JEEVES.md`](agents/JEEVES.md) for the full breakdown
-- All client-facing output reviewed by the operations lead before it goes anywhere; Jeeves surfaces, doesn't decide
+- All client-facing output reviewed by the studio's PM before it goes anywhere; Jeeves surfaces, doesn't decide
 
 This is a live deployment carrying real operational load, not a demo.
 
@@ -111,7 +111,7 @@ Nova tries to write: /clients/{client}/social-media/response.md
 
 ### Tenant contract, enforced by convention and by architecture
 
-Every department agent's operating contract states the hard rule plainly: *"Never access other tenants — Kernel agents don't see Flint, vice versa."* That's backed by the same fs-scoping and palace-prefix mechanism above, not left as an honor system.
+Every department agent's operating contract states the hard rule plainly: *"Never access other tenants — one company's agents don't see the other's data, vice versa."* That's backed by the same fs-scoping and palace-prefix mechanism above, not left as an honor system.
 
 ### Cost of getting this wrong
 
@@ -191,7 +191,7 @@ Full detail in [`architecture/tech-stack.md`](architecture/tech-stack.md).
 - Department agents talk to their team's Slack channel, not to the operator — a deliberate "delegation of automation," not remote-control tooling
 
 **Current status:**
-- **Live in production:** Orchestrator (gateway), Jeeves (EA — active WP security monitoring, ClickUp integration, cross-company visibility)
+- **Live in production:** Orchestrator (gateway), Jeeves (EA/PM support — active WP security monitoring, ClickUp integration)
 - **Built, tested, paused for team rollout:** Nova, Sage (tool policy + file scoping complete; awaiting Slack channel activation with their teams)
 
 ---

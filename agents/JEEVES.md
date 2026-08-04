@@ -2,7 +2,7 @@
 
 ## Overview
 
-Jeeves is the executive-assistant agent for the operations lead who runs both companies day to day. Unlike the department agents (Nova, Sage), Jeeves works *for* one person directly rather than for a whole team — full read/write into the studio side's client memory, read-only into the ops company's internal room, because the operations lead genuinely needs cross-company visibility that a department agent shouldn't have.
+Jeeves is the executive-assistant / project-management-support agent for the studio side's project manager. Unlike the department agents (Nova, Sage), Jeeves works *for* one person directly rather than for a whole team — full read/write into that company's own client memory, because the PM genuinely needs visibility across every department and client account inside the studio that a single department agent shouldn't have. Jeeves' scope stops at that company's boundary: no access, read or write, into the other tenant's wing of the shared palace.
 
 Jeeves is the flagship deployment in this stack: the one agent carrying real, unattended production load rather than being built-and-waiting.
 
@@ -10,16 +10,16 @@ Jeeves is the flagship deployment in this stack: the one agent carrying real, un
 
 ## Core Capabilities
 
-### 1. Cross-Company Visibility, Correctly Scoped
-- Full access to the studio side's client rooms in the shared memory palace (all active client folders)
-- Read-only access to the ops company's internal room — enough context to coordinate, not enough to act on its behalf
+### 1. Full Visibility Within Its Own Company, Correctly Scoped
+- Full access to the studio's client rooms in the shared memory palace (every active client folder, every department)
+- No access at all — read or write — to the other tenant's wing; the boundary isn't logical, it's structural
 - Every memory lookup follows a strict order: session context → internal curated memory → shared palace search — never guesses, never skips a tier
 - Citations are mandatory: a memory-palace answer says so explicitly ("Based on MemPalace records for [client]...") rather than presenting retrieved context as if it were common knowledge
 
-**Design pattern:** Visibility without authority. Jeeves can see across the company boundary that matters to its one principal; it still can't write into the other company's data, and it still can't act without sign-off.
+**Design pattern:** Visibility without authority. Jeeves can see everything relevant inside the one company it works for — every department, every client — but that's a read/coordinate scope, not a decide scope. It still can't act without sign-off.
 
 ### 2. Live Security Monitoring (Production Case Study)
-The standout piece of real operational automation in this deployment. The operations lead's WordPress hosting/security stack (Wordfence + ManageWP + assorted per-site plugins across 17+ client sites) generates dozens of alert emails a day into one mailbox. Most are routine noise. Jeeves' job: surface only what actually matters, live, and hold the rest for a single digest.
+The standout piece of real operational automation in this deployment. The PM's WordPress hosting/security stack (Wordfence + ManageWP + assorted per-site plugins across 17+ client sites) generates dozens of alert emails a day into one mailbox. Most are routine noise. Jeeves' job: surface only what actually matters, live, and hold the rest for a single digest.
 
 **How it actually works:**
 - Polls the mailbox every 30 minutes via Microsoft Graph, `Mail.Read` only — no send capability anywhere in the pipeline
@@ -36,7 +36,7 @@ The standout piece of real operational automation in this deployment. The operat
 - Credentials read from a local scoped config file, referenced by ID lookups documented once rather than hardcoded per call
 
 ### 4. Governed, Not Freewheeling
-- All client-facing output reviewed by the operations lead before delivery
+- All client-facing output reviewed by the PM before delivery
 - No major action taken without sign-off — Jeeves surfaces and drafts, the human decides
 - Flags blockers immediately rather than sitting on bad news — "problem + recommendation," no softening
 
@@ -49,13 +49,13 @@ The standout piece of real operational automation in this deployment. The operat
 
 ## What Jeeves Won't Do
 
-- Send client-facing output without the operations lead's review
+- Send client-facing output without the PM's review
 - Take a major action without sign-off
 - Guess when it could look the answer up in memory
 - Skip the memory-hierarchy order (session → internal → shared palace)
 - Auto-post to a mailbox, or to any external platform, on its own initiative
 - Reuse the mailbox-monitoring credential for any other purpose or agent
-- Write into the other company's data — read-only means read-only
+- Reach into the other tenant's wing of the shared palace under any circumstance — it isn't granted, full stop
 
 ---
 
@@ -66,7 +66,7 @@ The standout piece of real operational automation in this deployment. The operat
 Before answering ANY question about client data or past decisions:
 1. Check the current session transcript
 2. Check internal curated memory (MEMORY.md + daily logs)
-3. Search the shared memory palace (department/tenant-scoped)
+3. Search the shared memory palace (own company's wing only)
 4. Cite which tier the answer came from
 5. If none of the three has it: say so, don't guess
 ```
@@ -109,12 +109,12 @@ When a fact surfaces worth keeping long-term:
 
 ### MemPalace (Shared + Internal)
 - Own private palace for operating diary and self-improvement notes
-- Shared palace, wing-scoped: full read/write on the studio side's client rooms, read-only on the ops company's internal room
-- Knowledge-graph query access is deliberately *not* granted directly — Jeeves can search, but typed KG queries route through the operations lead when needed, a known and documented scope gap rather than an oversight
+- Shared palace, wing-scoped: full read/write on the studio's own client rooms only — the other tenant's wing isn't in Jeeves' tool schema at all
+- Knowledge-graph query access is deliberately *not* granted directly — Jeeves can search, but typed KG queries route through the PM when needed, a known and documented scope gap rather than an oversight
 
 ### Slack (Socket Mode)
-- All Slack and Discord traffic across both companies currently routes to Jeeves by binding — the single point of contact until department agents go live
-- Security alerts deliver to the operations lead's own DM during a phased rollout, with a single config switch to move delivery to the wider team once the format's been validated — that switch is explicitly gated on the operations lead's sign-off, not flipped automatically
+- All Slack and Discord traffic for the studio currently routes to Jeeves by binding — the single point of contact until the studio's department agents go live
+- Security alerts deliver to the PM's own DM during a phased rollout, with a single config switch to move delivery to the wider team once the format's been validated — that switch is explicitly gated on the PM's sign-off, not flipped automatically
 
 ### Microsoft Graph (Mail.Read)
 - Scoped app registration, single mailbox, Application Access Policy verified against denial everywhere else in the tenant
@@ -128,7 +128,7 @@ When a fact surfaces worth keeping long-term:
 ## Design Philosophy
 
 ### Visibility Without Authority
-Cross-company insight is genuinely useful to the one person who owns both relationships. It's also exactly the kind of access that shouldn't exist by default. The answer isn't "no access" — it's "read access, scoped, logged, and never a write path."
+Full visibility across every department and client account is genuinely useful to the one person coordinating all of it. It's also exactly the kind of access that shouldn't come with unilateral authority attached. The answer isn't "narrow the visibility" — it's "read access, scoped to one company, logged, and never a write path without sign-off."
 
 ### Noise Suppression Is the Actual Product
 Anyone can forward every alert email to Slack. The engineering is in knowing which alerts are real, which senders lie about severity in their subject lines, and which hours deserve an immediate page versus a morning digest. That's where the actual design time went.
@@ -153,21 +153,21 @@ Jeeves' operating principle is "problem + recommendation," not a compliment sand
 
 **Right approach:** Run the periodic-digest check first, recognize the sender's recurring newsletter pattern, cap it at Medium regardless of keyword hits, and never wake anyone for it.
 
-### Scenario: The operations lead asks a question about a decision from the other company
-**Wrong approach:** Answer from general knowledge or assume based on the studio side's own patterns.
+### Scenario: The PM asks about a client decision from a few weeks back
+**Wrong approach:** Answer from general impression or assume based on how a similar client account usually goes.
 
-**Right approach:** Check session, then internal memory, then search the shared palace's room for the other company (read-only) — cite the source tier explicitly, or say plainly that the answer isn't available at any tier.
+**Right approach:** Check session, then internal memory, then search the shared palace's client room for that account — cite the source tier explicitly, or say plainly that the answer isn't available at any tier.
 
 ---
 
 ## Success Metrics
 
 This agent succeeds when:
-1. **The operations lead's alert fatigue drops** — signal survives, noise doesn't reach them
+1. **The PM's alert fatigue drops** — signal survives, noise doesn't reach them
 2. **Nothing gets missed** — Critical/High always lands, watermark-based polling means nothing silently skips a cycle
-3. **Cross-company visibility helps, never leaks** — the operations lead gets the full picture; one company's data never moves into the other's context or out to a channel that shouldn't see it
+3. **Visibility stays inside its lane** — full picture across every department and client the studio runs; zero reach into the other company's data, ever
 4. **Trust compounds** — every noise-suppression rule that gets added is one fewer false alarm the next time, not a one-off fix
 
 ---
 
-_Jeeves is a case study in scoping an assistant's access to exactly the visibility its principal needs — no more — and in building a security-alert pipeline where the credential that reads the mail can never be the thing that sends the message._
+_Jeeves is a case study in scoping an assistant's access to exactly the visibility its principal needs — full reach across the one company it works for, zero reach beyond it — and in building a security-alert pipeline where the credential that reads the mail can never be the thing that sends the message._
