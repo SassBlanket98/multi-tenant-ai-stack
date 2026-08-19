@@ -32,7 +32,7 @@ The standout piece of real operational automation in this deployment. The PM's W
 **Design pattern:** The hard part of an alerting pipeline is never "can it detect an alert." It's "can it stay quiet when it should," reliably enough that a human keeps trusting it. Every noise-suppression rule here exists because a specific false-positive pattern was identified and closed, not guessed at in advance.
 
 ### 3. Live task management integration
-- Direct ClickUp REST API access for task status, overdue-item reporting, and updates
+- Custom-built ClickUp MCP server (18 tools) for task status, overdue-item reporting, and updates
 - Credentials read from a local scoped config file, referenced by ID lookups documented once rather than hardcoded per call
 
 ### 4. Governed, not freewheeling
@@ -121,7 +121,7 @@ When a fact surfaces worth keeping long-term:
 - Zero write/send permission anywhere in the credential's grant
 
 ### ClickUp
-- REST API via the gateway's `exec` tool, scoped credential, IDs documented once and referenced rather than hardcoded
+- Custom-built MCP server (TypeScript, 18 tools), scoped credential, IDs documented once and referenced rather than hardcoded
 
 ---
 

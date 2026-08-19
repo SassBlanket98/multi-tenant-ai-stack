@@ -75,7 +75,7 @@ Jeeves is the flagship of this stack, the one agent doing real unattended work i
 
 **What Jeeves does in production:**
 - Full read/write access to the studio's own client rooms in the shared memory palace, across every department and account, with no access at all into the other company's wing
-- ClickUp task status and reporting via the live REST API
+- ClickUp task status and reporting via a custom-built ClickUp MCP server (18 tools)
 - Polls a shared mailbox every 30 minutes across 17+ client WordPress sites for Wordfence/ManageWP security alerts, classifies severity, suppresses known noise, and posts only what actually matters straight to Slack. Full breakdown in [`agents/JEEVES.md`](agents/JEEVES.md)
 - All client-facing output reviewed by the studio's PM before it goes anywhere; Jeeves surfaces, doesn't decide
 
@@ -98,6 +98,10 @@ The core engineering problem here isn't "give an agent memory." It's giving mult
 As of a 2026-07-31 rebuild, the single shared memory palace was split into three physically separate palace instances: Orchestrator's own, Jeeves' own, and a shared cross-agent/department palace holding both companies' client wings plus the knowledge graph. Each agent's tool schema only contains the MCP tool prefixes for the palaces it's allowed to touch (`mempalace-orchestrator__*`, `mempalace-jeeves__*`, `mempalace-shared__*`).
 
 This was verified live, not just configured. A wrong-prefix tool call isn't rejected at call time by a permission check an agent could theoretically talk itself around: the tool is structurally absent from that agent's schema, confirmed by direct agent-turn tests in both directions. There's no prompt that reaches a tool an agent was never handed.
+
+### Tool inventory, and why the raw total isn't the interesting number
+
+The gateway registers 5 MCP servers: 4 MemPalace instances at 33 tools each plus the custom-built ClickUp server at 18. Jeeves, the flagship deployment, has an explicit tool-schema whitelist reaching 35 of those tools, not the full registered set. Every other agent's whitelist is narrower still. The registered total is a ceiling on what the gateway can do, not a description of what any one agent can reach.
 
 ### Department scoping is enforced at two independent layers
 
@@ -158,7 +162,7 @@ All routine memory maintenance (diary compression, daily memory-promotion propos
 - Kimi K3 via OpenRouter, planning, analysis, judgment (primary model, all agents)
 - GLM-5.2 via OpenRouter, execution/grunt-work subagent tier
 - Gemma 4 (31B), subagent fallback tier
-- Migrated off the Anthropic API mid-2026 after recurring billing and credit issues; the architecture is provider-agnostic by design
+- Migrated off the Anthropic API in July 2026 after recurring billing and credit issues; the architecture is provider-agnostic by design
 
 **Memory and data:**
 - MemPalace: three physical instances (2 private, 1 shared), MCP-native
@@ -168,7 +172,7 @@ All routine memory maintenance (diary compression, daily memory-promotion propos
 **Integration:**
 - Slack (Socket Mode): primary department-facing channel, per-channel scoping
 - Discord and Telegram: secondary channels, pairing-gated DMs
-- ClickUp REST API: live task and project status
+- Custom-built ClickUp MCP server (18 tools): live task and project status
 - Microsoft Graph (Mail.Read only, single-mailbox app-access policy): read-only security alert monitoring
 - Google Workspace (planned, phase 2)
 
