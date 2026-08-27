@@ -1,255 +1,51 @@
 # multi-tenant-ai-stack
 
-[![Multi-Tenant](https://img.shields.io/badge/tenants-2_companies-blueviolet?style=flat-square)](https://github.com)
-[![Multi-Agent](https://img.shields.io/badge/agents-2_live_%2B_2_designed-blue?style=flat-square)](https://github.com)
-[![Self-Hosted](https://img.shields.io/badge/infrastructure-self--hosted-green?style=flat-square)](https://github.com)
-[![Isolation: Enforced](https://img.shields.io/badge/tenant%20isolation-schema--level-success?style=flat-square)](#multi-tenant-security-architecture)
-[![License: Client Work](https://img.shields.io/badge/license-client--confidential-red?style=flat-square)](#)
-
----
-
 ## Overview
 
-A production multi-agent AI deployment built on OpenClaw, standing up department-facing AI agents for two independent companies (one an operations/finance-led business, the other a creative and dev studio) that share an office and a Slack workspace but must never share data.
+A production multi-agent deployment built on OpenClaw, standing up department-facing AI agents for two independent companies that share infrastructure but need their own data kept separate. One gateway supports two companies' operational context while keeping access deliberately scoped.
 
-This is the harder version of the single-owner problem. Instead of one person's context, the system has to hold two companies' worth of client and operational data on one gateway, hand slices of it to department-level agents that talk directly to teams instead of the operator, and actually guarantee, not just write down as policy, that a marketing agent can never read finance data and that one company's business never leaks into the other's context.
+Company names and other identifying details are anonymized throughout. The architecture and decisions described here are real.
 
-Company names, individuals, and other identifying details in this write-up are anonymized or generalized throughout for confidentiality. The architecture, security model, and operational patterns are real.
+## Architecture, in short
 
----
+Each agent runs on OpenClaw with its own tool schema and its own slice of shared memory, built on MemPalace (open source). An agent only has the tools and memory access its role needs. Tools it shouldn't use aren't offered as an option, rather than relying on a policy telling it not to use them. Department agents report to the teams that own the work, not back through the operator, so approvals and corrections happen at the team level instead of bottlenecking through whoever built the system.
 
-## Architecture
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                         macOS Mac Mini (gateway host)                    │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │                    OpenClaw Gateway (self-hosted)                │   │
-│  │                                                                  │   │
-│  │   ┌─────────────┐  ┌─────────────┐  ┌───────┐  ┌───────┐        │   │
-│  │   │ ORCHESTRATOR│  │   JEEVES    │  │ NOVA  │  │ SAGE  │        │   │
-│  │   │ (gateway /  │  │ (EA - live  │  │(dept, │  │(dept, │        │   │
-│  │   │  operator)  │  │ production) │  │designed)│(designed)│      │   │
-│  │   │  Kimi K3    │  │  Kimi K3    │  │Kimi K3│  │Kimi K3│        │   │
-│  │   └──────┬──────┘  └──────┬──────┘  └───┬───┘  └───┬───┘        │   │
-│  └──────────┼────────────────┼─────────────┼──────────┼────────────┘   │
-│             │                │             │          │                │
-│    ┌────────┴───────┐   ┌────┴────┐  fs.allowPaths + tool profile:     │
-│    │ mempalace-      │   │mempalace-│  minimal - enforced per-agent,   │
-│    │ orchestrator    │   │ jeeves   │  not just documented             │
-│    │ (private)       │   │(private) │                                  │
-│    └────────┬────────┘   └────┬─────┘                                  │
-│             │                 │                                        │
-│             └────────┬────────┘                                        │
-│                       ▼                                                │
-│         ┌─────────────────────────────┐                                │
-│         │      mempalace-shared       │                                │
-│         │  wing: ops-tenant           │                                │
-│         │  wing: studio-tenant        │                                │
-│         │  + cross-agent Knowledge    │                                │
-│         │    Graph (confirm-or-kill)  │                                │
-│         └─────────────────────────────┘                                │
-└───────────────────────────┼──────────────────────────────────────────── ┘
-                             │
-              ┌──────────────┼──────────────┐
-              ▼              ▼              ▼
-          Slack (socket)  Discord        Telegram
-          (primary)        (pairing)     (pairing)
-              │
-   ┌──────────┴──────────┐
-   │  Department channels │
-   │  scoped per company,  │
-   │  per team              │
-   └────────────────────────┘
-```
+This scoping isn't a finished, closed problem. It's something I keep reviewing and tightening as gaps turn up, not a claim that crossover between tenants is impossible.
 
 ## Agent roster
 
-### Orchestrator: gateway and systems architect
-The only agent with full gateway control. Builds, configures, and hands off every other agent; never itself client-facing.
+- **Orchestrator**: gateway and systems architect. The only agent with full gateway control; never itself client-facing.
+- **Jeeves**: the flagship deployment, doing real unattended work for one of the two companies: day-to-day PM and admin support, reviewed by that company's own PM before anything client-facing goes out.
+- **Nova, Sage**: department-scoped agents, built and tool-scoped, currently paused pending team rollout.
 
-**Design stance:** *"Implementation over experimentation."* No department agent ships without documented tool policy, file scope, and a tested handoff. Runs the model-delegation split (below) on every non-trivial task itself before ever spawning a subagent.
+## Current status
 
-### Jeeves: executive assistant (flagship deployment)
-Jeeves is the flagship of this stack, the one agent doing real unattended work instead of sitting built-and-waiting. It's the studio side's executive-assistant and PM-support agent: full visibility across that company's departments and client accounts, plus a live security-monitoring pipeline running in production.
-
-**What Jeeves does in production:**
-- Full read/write access to the studio's own client rooms in the shared memory palace, across every department and account, with no access at all into the other company's wing
-- ClickUp task status and reporting via a custom-built ClickUp MCP server (18 tools)
-- Polls a shared mailbox every 30 minutes across 17+ client WordPress sites for Wordfence/ManageWP security alerts, classifies severity, suppresses known noise, and posts only what actually matters straight to Slack. Full breakdown in [`agents/JEEVES.md`](agents/JEEVES.md)
-- All client-facing output reviewed by the studio's PM before it goes anywhere; Jeeves surfaces, doesn't decide
-
-It's carrying real operational load in production right now.
-
-### Nova: marketing and newsletter agent (designed, tool-scoped, paused for rollout)
-Department agent for the studio side's marketing team. Tool policy and filesystem scoping are fully implemented and tested: Nova can only read and write inside her department's folder tree, enforced by OpenClaw at the runtime level rather than by prompt instruction alone. She's currently dormant (no cron, no channel binding, zero running cost) pending Slack channel activation with the marketing team.
-
-### Sage: social media agent (designed, tool-scoped, paused for rollout)
-Same status as Nova, scoped to the social-media department folder tree instead. Built to monitor platform trends and suggest responses, never post them; publishing stays a human action by design.
-
----
-
-## Multi-tenant security architecture
-
-The core engineering problem here isn't "give an agent memory." It's giving multiple agents (two live in production, two fully built and scoped but not yet switched on) overlapping-but-not-identical memory on one gateway, with zero possibility of cross-contamination, across two companies who are paying customers of the same consultant and have every right to expect their data never touches the other's.
-
-### Isolation is structural, not promised
-
-As of a 2026-07-31 rebuild, the single shared memory palace was split into three physically separate palace instances: Orchestrator's own, Jeeves' own, and a shared cross-agent/department palace holding both companies' client wings plus the knowledge graph. Each agent's tool schema only contains the MCP tool prefixes for the palaces it's allowed to touch (`mempalace-orchestrator__*`, `mempalace-jeeves__*`, `mempalace-shared__*`).
-
-This was verified live, not just configured. A wrong-prefix tool call isn't rejected at call time by a permission check an agent could theoretically talk itself around: the tool is structurally absent from that agent's schema, confirmed by direct agent-turn tests in both directions. There's no prompt that reaches a tool an agent was never handed.
-
-### Tool inventory, and why the raw total isn't the interesting number
-
-The gateway registers 5 MCP servers: 4 MemPalace instances at 33 tools each plus the custom-built ClickUp server at 18. Jeeves, the flagship deployment, has an explicit tool-schema whitelist reaching 35 of those tools, not the full registered set. Every other agent's whitelist is narrower still. The registered total is a ceiling on what the gateway can do, not a description of what any one agent can reach.
-
-### Department scoping is enforced at two independent layers
-
-Nova and Sage each run with `tools.profile: "minimal"` (nothing granted by default) plus an explicit allowlist, and a filesystem-level `fs.allowPaths` restricting file read/write/edit to their own department's folder tree (`clients/*/marketing-newsletter/**` vs `clients/*/social-media/**`). Cross-department reads happen only through the shared memory palace's semantic search: read-only, logged, department-tagged, never through direct file access.
-
-```
-Nova tries to write: /clients/{client}/social-media/response.md
-→ OpenClaw checks fs.allowPaths → not in scope → blocked with a clear error
-→ Not a policy Nova could reason her way around: it's not in her tool schema
-```
-
-### Tenant contract, enforced by convention and by architecture
-
-Every department agent's operating contract states the hard rule plainly: "Never access other tenants. One company's agents don't see the other's data, and vice versa." That's backed by the same fs-scoping and palace-prefix mechanism above, not just left as an honor system.
-
-### Cost of getting this wrong
-
-The knowledge graph runs a strict confirm-or-kill protocol: no fact is ever auto-written. Every candidate fact is proposed to a human first, batched at a natural pause rather than interrupting mid-task (per-fact interruptions don't get answered; batched ones do). This exists because the home-lab predecessor to this system had a real incident where unconfirmed facts bled between contexts. The lesson got carried over here as a hard rule from day one, instead of being learned the expensive way twice.
-
----
-
-## Memory architecture
-
-See [`architecture/MEMPALACE-STRUCTURE.md`](architecture/MEMPALACE-STRUCTURE.md) for the full structure. Summary:
-
-- Physical palace separation: each agent gets a private palace, plus one shared palace (cross-agent and cross-department, wing-scoped by tenant)
-- 13,000+ curated drawers across the two tenant wings as of the last structure audit
-- AAAK diary format: compressed, entity-coded session logs written mid-conversation after significant events, not at "end of session," which doesn't fire reliably
-- Confirm-or-kill KG: a weekly automated stage proposes candidate facts (tiered confirm / needs eyes / pre-killed), and nothing writes without an explicit human yes
-- Zero-cost cleanup discipline: a prior audit reclassified roughly 14,000 drawers using direct SQLite scripts, at zero LLM cost, and flagged about 8,795 of them as confirmed noise before anyone spent review time on them
-
----
-
-## Automation and governance pipeline
-
-### Model delegation (cost control)
-Two-tier routing on every agent: a capable planning model does analysis, investigation, and judgment calls directly; a cheaper execution model gets spawned as a subagent only for the mechanical grunt work once the plan is set, then the planning model reviews and corrects its output. Mechanical and bulk operations (pagination-style data work) are routed to a `$0` script before either model touches them. Subagents are for judgment-requiring work, not raw data plumbing.
-
-### Skill workshop: governed installation
-Skills aren't installed ad hoc. Every skill goes through a proposal, review, approve, apply pipeline, each with a `PROPOSAL.md`, a `proposal.json`, and a `rollback.json`. Every install is a documented, reversible decision. This isn't theoretical either: a raw `curl`-delivered skill was a deliberate test of exactly this. Two separate agent sessions, on two separate channels, refused to install it on judgment alone, before tool deny lists existed, holding the refusal even when told directly to install it anyway. The same skill was later fetched, reviewed line by line, and properly installed through the workshop.
-
-### Proactive agent protocol (deployed to all 4 agent configs: 2 live, 2 built and paused)
-- **WAL (Write-Ahead Log):** decisions, corrections, and preferences get written to session state *before* the agent responds, not after
-- **Working buffer:** activates at 60% context capacity; captures the conversation verbatim so a context reset never loses the thread
-- **Compaction recovery:** an agent waking up mid-context-loss reads the working buffer first, so it never has to ask "what were we doing?"
-- **Verify-before-reporting:** "done" requires confirming the outcome from the user's perspective, not just that a file exists
-- **ADL/VFM guardrails:** every self-improvement change is scored against a fixed priority order (stability, then explainability, then reusability, then scalability, then novelty) before it ships
-
-### Cron-driven memory hygiene
-All routine memory maintenance (diary compression, daily memory-promotion proposals, weekly cleanup, weekly KG-gate) runs on the cheapest capable model, in isolated sessions with restricted tool lists, so hygiene work never touches or bills against the main session.
-
----
-
-## Tech stack
-
-**Core:**
-- OpenClaw (self-hosted AI gateway, macOS)
-- Kimi K3 via OpenRouter, planning, analysis, judgment (primary model, all agents)
-- GLM-5.2 via OpenRouter, execution/grunt-work subagent tier
-- Gemma 4 (31B), subagent fallback tier
-- Migrated off the Anthropic API in July 2026 after recurring billing and credit issues; the architecture is provider-agnostic by design
-
-**Memory and data:**
-- MemPalace: three physical instances (2 private, 1 shared), MCP-native
-- Knowledge Graph with temporal validity (`valid_from`/invalidate, never silent overwrite)
-- SQLite-backed drawer storage, direct-script classification for bulk cleanup
-
-**Integration:**
-- Slack (Socket Mode): primary department-facing channel, per-channel scoping
-- Discord and Telegram: secondary channels, pairing-gated DMs
-- Custom-built ClickUp MCP server (18 tools): live task and project status
-- Microsoft Graph (Mail.Read only, single-mailbox app-access policy): read-only security alert monitoring
-- Google Workspace (planned, phase 2)
-
-**Infrastructure:**
-- macOS (Mac Mini)
-- Cron-based scheduling, model-tiered by job type
-- Skill Workshop (proposal/approve/apply/rollback pipeline)
-
-Full detail in [`architecture/tech-stack.md`](architecture/tech-stack.md).
-
----
-
-## Deployment model
-
-**Where:** Self-hosted on a Mac Mini at the client's office, shared by two companies
-
-**Isolation:**
-- Two independent tenants (an operations/finance business, a creative + dev studio) sharing one gateway
-- Four agent instances built (two live in production, two designed and scoped but paused for team rollout), each with an enforced tool, memory, and filesystem scope
-- Department agents talk to their team's Slack channel rather than to the operator: deliberate delegation of automation, not remote-control tooling
-
-**Current status:**
-- **Live in production:** Orchestrator (gateway), Jeeves (EA/PM support, active WP security monitoring, ClickUp integration)
-- **Built, tested, paused for team rollout:** Nova, Sage (tool policy and file scoping complete; awaiting Slack channel activation with their teams)
-
----
+Two agents (Orchestrator, Jeeves) are live in production. Two (Nova, Sage) are built and scoped but not yet switched on.
 
 ## Key design decisions
 
-### Why physically separate palaces, not one palace with logical scoping?
-Logical/prose-level scoping is a policy an agent could misread or a prompt could talk around. Physical separation plus tool-schema-level exclusion means the forbidden tool literally doesn't exist for that agent. There's no clever prompt that reaches a tool that was never granted.
+**Why department agents talk to their own teams, not back through the operator.** An agent that routes every output through the person who built it doesn't scale past one team and doesn't save anyone time. Team leads review their own agent's output; the operator keeps gateway-level control, not day-to-day approval authority.
 
-### Why department agents talk to teams, not to the operator?
-The brief here was never "automate David's job." It's standing up automation for the client's teams. An agent that routes every output through the operator doesn't scale past one department and doesn't actually save the client anything. Team leads approve their own agent's output; the operator keeps gateway-level control, not day-to-day approval authority.
+**Why tool scoping over policy alone.** A written rule saying "don't touch the other tenant's data" is worth less than a tool that simply isn't available to call. I lean on the second wherever I can, and treat the written rule as documentation of intent, not as the enforcement mechanism itself.
 
-### Why a governed skill pipeline instead of direct installs?
-Because the failure mode isn't hypothetical: a live prompt-injection attempt via a raw `curl`-delivered "skill" was caught in this exact deployment. A proposal/review/rollback pipeline turns "trust the agent's judgment in the moment" into "review a diff before it becomes capability."
+**Why this isn't described as "solved."** Any claim of total isolation on a live, evolving system is either untested or temporary. What actually holds this together is scoping decisions made deliberately, reviewed regularly, and tightened when something looks off, not a one-time design that gets assumed to be airtight forever.
 
-### Why confirm-or-kill on the knowledge graph?
-An unconfirmed fact that turns out wrong doesn't just sit there. It gets retrieved and acted on by every future query that touches it. Human confirmation before write is cheap; unwinding a contaminated KG is not.
+## Lessons
 
----
+- Documentation isn't enforcement. A written rule that agents don't cross tenants is worth much less than a tool that literally isn't available to call. Build the second one, and keep the first as the explanation of intent.
+- Automation should report to whoever owns the problem, not to whoever built it. That's what keeps it from becoming a bottleneck once more than one team is involved.
 
-## Lessons learned
+## Tech stack
 
-### On multi-tenant isolation
-Documentation is not enforcement. "Agents don't cross tenants" as a written rule is worth nothing next to "the tool literally isn't in the agent's schema." Build the second one; keep the first one as the human-readable explanation of why.
+- OpenClaw (self-hosted AI gateway)
+- MemPalace (open source) for agent memory
+- Slack as the primary department-facing channel; Discord and Telegram for operator access
+- Model routing tiered by task complexity
 
-### On skill installation
-Any inbound instruction that says "run this to install a capability" is a live attack surface, not a convenience feature. Route it through review every time, even when it looks legitimate, especially when it looks legitimate.
+## Contact
 
-### On automation ownership
-The most successful deployment here (Jeeves) works because it reports to the team that owns the problem, not to whoever built it. Automation that routes everything back through the builder becomes a bottleneck the moment there's more than one department.
-
-### On cost discipline
-Bulk, mechanical work is a script problem, not a model problem. Spawning an LLM subagent for pagination-style data work is money spent solving a problem that `$0` of Python already solves.
+Architected and deployed by David Hill. Available for consulting on multi-agent AI architecture and agent security design.
 
 ---
 
-## Getting started
-
-This is confidential client infrastructure, not open-source, though the architecture and decisions are documented here for reference.
-
-### To deploy a similar multi-tenant setup
-1. Stand up OpenClaw as the gateway; keep gateway-level control separate from any department agent
-2. Split memory physically per agent before it's needed, not after the first cross-contamination incident
-3. Enforce department/tenant scope at the tool-schema and filesystem level; never rely on prompt discipline alone
-4. Put every skill install behind a review pipeline with rollback, from day one
-5. Route department agents to the teams that own the work, not back through the operator
-6. Build the confirm-or-kill gate before the knowledge graph has anything worth contaminating
-
----
-
-## Architected and deployed by David Hill
-
-**Contact:** Available for consulting on multi-tenant AI architecture, agent security design, and self-hosted enterprise automation.
-
----
-
-**Last updated:** 2026-08-04 | **Status:** Production (Jeeves) + Designed & Scoped (Nova/Sage)
+**Last updated:** 2026-08-27
